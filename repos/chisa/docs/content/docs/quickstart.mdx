@@ -1,0 +1,98 @@
+---
+title: Quickstart
+description: From zero to synced todos in five minutes
+icon: Rocket
+---
+
+import { Steps, Step } from 'fumadocs-ui/components/steps';
+
+## Prerequisites
+
+- **Zig 0.16.0** to build the server
+- **Node.js ≥ 20** for the client (or any browser at runtime)
+
+<Steps>
+
+<Step>
+
+## Define your schema
+
+```ts title="schema.ts"
+import { defineSchema, defineTable, v } from "@chisa/client";
+
+const schema = defineSchema({
+  todos: defineTable({
+    text: v.string(),
+    done: v.boolean(),
+    priority: v.optional(v.number()),
+  }),
+});
+
+export default schema;
+export type Schema = typeof schema;
+```
+
+</Step>
+
+<Step>
+
+## Export it for the server
+
+The server enforces the same schema at runtime. Export it as JSON:
+
+```ts title="export-schema.ts"
+import { writeFileSync } from "node:fs";
+import schema from "./schema.js";
+
+writeFileSync("chisa.schema.json", JSON.stringify(schema.toJSON(), null, 2));
+```
+
+</Step>
+
+<Step>
+
+## Start the server
+
+```bash
+cd server
+zig build run -- --schema ../chisa.schema.json --port 4700 --data chisa.log
+```
+
+Omit `--schema` to run schemaless while prototyping (any shape accepted).
+
+</Step>
+
+<Step>
+
+## Connect a synced client
+
+```ts title="app.ts"
+import { ChisaClient } from "@chisa/client";
+import type { Schema } from "./schema.js";
+
+const client = new ChisaClient<Schema>({ url: "ws://127.0.0.1:4700" });
+
+// Live query: the callback re-fires on every relevant change.
+const stop = client.subscribe(
+  client.query("todos").filter((f) => f.eq("done", false)),
+  (docs) => console.log(`${docs.length} open todos`), // fully typed
+);
+
+const id = await client.insert("todos", { text: "buy milk", done: false });
+await client.patch("todos", id, { done: true });
+```
+
+Open the same subscription from a second process — both see every change
+instantly. That's the sync engine at work.
+
+</Step>
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Schema reference" href="/docs/schema" />
+  <Card title="Query reference" href="/docs/queries" />
+  <Card title="React bindings" href="/docs/react" />
+</Cards>

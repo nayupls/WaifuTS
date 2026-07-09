@@ -23,6 +23,11 @@ values instead of strings, so they can't be injected into.
 | `packages/client/` | TypeScript client: schema DSL, typed query builder, live subscriptions, mutations, auto-reconnect. | none         |
 | `packages/react/`  | React binding: `ChisaProvider`, `useQuery`, `useMutation`.              | `@chisa/client` (peer: `react`) |
 | `examples/todo/`   | Schema + demo scripts used by the end-to-end smoke test.                | —            |
+| `docs/`            | Documentation site + landing page (Fumadocs / Next.js). `cd docs && npm install && npm run dev`. | standalone app |
+
+Full documentation lives in [`docs/content/docs`](docs/content/docs) and is
+served at `/docs` by the site in `docs/` (landing page at `/`). Agents get a
+project skill at [`.claude/skills/chisa`](../../.claude/skills/chisa/SKILL.md).
 
 ## How syncing works
 

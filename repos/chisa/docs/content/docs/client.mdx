@@ -1,0 +1,70 @@
+---
+title: Sync client
+description: Live subscriptions, mutations and reconnection
+icon: RefreshCw
+---
+
+`@chisa/client` is a zero-dependency TypeScript package that works in browsers
+and Node ≥ 20 (both ship a global `WebSocket`).
+
+## Creating a client
+
+```ts
+import { ChisaClient } from "@chisa/client";
+import type { Schema } from "./schema.js";
+
+const client = new ChisaClient<Schema>({
+  url: "ws://127.0.0.1:4700",
+  onStatusChange: (s) => console.log(s), // "connecting" | "connected" | "closed"
+  onError: (msg) => console.error(msg),  // server-reported protocol errors
+});
+```
+
+Other environments can inject an implementation with `webSocket:`; reconnection
+can be disabled with `reconnect: false`.
+
+## Live subscriptions
+
+```ts
+const stop = client.subscribe(
+  client.query("todos").filter((f) => f.eq("done", false)),
+  (docs) => render(docs),
+);
+
+// later
+stop();
+```
+
+The callback fires with the initial result set and again after **every
+mutation that touches the table**. The server pushes the full, fresh result of
+your query each time — you never poll, diff, or invalidate anything yourself.
+
+## Mutations
+
+```ts
+const id = await client.insert("todos", { text: "buy milk", done: false });
+
+await client.patch("todos", id, { done: true });          // shallow merge
+await client.replace("todos", id, { text: "x", done: false }); // full swap
+await client.delete("todos", id);
+```
+
+Every mutation resolves once the server has validated it against the schema,
+applied it, and appended it to the durable log. Rejections (unknown field,
+type mismatch, missing document, …) reject the promise with the reason.
+
+## Delivery and failure semantics
+
+- Mutations issued before the socket is open are queued and flushed on connect.
+- If the connection drops while a mutation is **in flight**, its promise
+  rejects with `connection lost before mutation was acknowledged` — the
+  outcome is unknown and the client will not silently retry (that could
+  double-apply). Retry at the application level if your mutation is idempotent.
+- Subscriptions are re-established automatically after reconnect (jittered
+  exponential backoff, capped at `maxBackoffMs`, default 10 s).
+
+## Shutting down
+
+```ts
+client.close(); // permanent: no reconnect, pending mutations reject
+```

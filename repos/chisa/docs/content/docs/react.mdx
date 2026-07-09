@@ -1,0 +1,80 @@
+---
+title: React
+description: ChisaProvider, useQuery and useMutation
+icon: Atom
+---
+
+`@chisa/react` wires the sync client into React. Components using `useQuery`
+re-render automatically whenever the data they read changes — locally or from
+any other client.
+
+## Setup
+
+```tsx title="main.tsx"
+import { ChisaClient } from "@chisa/client";
+import { ChisaProvider } from "@chisa/react";
+import schema from "./schema.js";
+
+const client = new ChisaClient<typeof schema>({ url: "ws://127.0.0.1:4700" });
+
+root.render(
+  <ChisaProvider client={client}>
+    <App />
+  </ChisaProvider>,
+);
+```
+
+## Reading data
+
+```tsx
+import { useChisaClient, useQuery } from "@chisa/react";
+
+function TodoList() {
+  const client = useChisaClient<typeof schema>();
+  const todos = useQuery(
+    client.query("todos").filter((f) => f.eq("done", false)).order("_creationTime", "desc"),
+  );
+
+  if (todos === undefined) return <p>loading…</p>;
+  return (
+    <ul>
+      {todos.map((t) => (
+        <li key={t._id}>{t.text}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+`useQuery` returns `undefined` while the first result set loads, then live,
+fully-typed documents. The subscription follows the component lifecycle: it is
+created on mount, torn down on unmount, and re-created if the query changes.
+
+## Writing data
+
+```tsx
+import { useMutation } from "@chisa/react";
+
+function AddTodo() {
+  const { insert, patch, replace, remove } = useMutation<typeof schema>();
+
+  return (
+    <button onClick={() => insert("todos", { text: "new", done: false })}>
+      Add
+    </button>
+  );
+}
+```
+
+The helpers are stable across renders (safe to pass as props or use in effect
+dependencies) and typed by your schema.
+
+## Patterns
+
+- **One client per app.** Create the `ChisaClient` once at module scope or in
+  a top-level `useMemo`; every `useQuery` shares its socket.
+- **Narrow queries.** Subscribe to what a component renders (`.filter`,
+  `.take`) rather than whole tables — updates are pushed as full result sets.
+- **Optimistic UI.** Mutations resolve quickly (single round trip), and the
+  authoritative update arrives on the same socket right after — most UIs don't
+  need manual optimistic state.

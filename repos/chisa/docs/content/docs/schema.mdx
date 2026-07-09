@@ -1,0 +1,91 @@
+---
+title: Schema
+description: Define your database in code
+icon: Database
+---
+
+Your schema is ordinary TypeScript. Defining it once gives you two things:
+
+1. **Static types** — every query result and mutation payload is inferred.
+2. **Runtime enforcement** — the server validates every mutation against the
+   exported schema before touching data.
+
+## Defining tables
+
+```ts
+import { defineSchema, defineTable, v } from "@chisa/client";
+
+const schema = defineSchema({
+  users: defineTable({
+    name: v.string(),
+    email: v.string(),
+  }),
+  todos: defineTable({
+    text: v.string(),
+    done: v.boolean(),
+    owner: v.id("users"),          // reference to a users document
+    priority: v.optional(v.number()),
+    tags: v.optional(v.array(v.string())),
+    meta: v.optional(v.object({ starred: v.boolean() })),
+  }),
+});
+```
+
+## Validators
+
+| Validator | TypeScript type | Notes |
+| --- | --- | --- |
+| `v.string()` | `string` | |
+| `v.number()` | `number` | integers and floats |
+| `v.boolean()` | `boolean` | |
+| `v.null()` | `null` | |
+| `v.any()` | `any` | escape hatch, skips type checking |
+| `v.id(table)` | `string` | a document id in `table` |
+| `v.array(el)` | `T[]` | every element checked against `el` |
+| `v.object(fields)` | object | nested fields, checked recursively |
+| `v.optional(inner)` | `T \| undefined` | field may be absent on insert |
+
+## System fields
+
+The server adds two fields to every document:
+
+- `_id: string` — server-generated, random, unique per document
+- `_creationTime: number` — Unix milliseconds
+
+They can be used in filters and ordering like any other field, but cannot be
+written by clients (they're silently ignored in patches).
+
+## Deriving types
+
+```ts
+import type { Doc, NewDoc, Infer } from "@chisa/client";
+
+type Todo = Doc<typeof schema, "todos">;      // fields + _id + _creationTime
+type TodoInsert = NewDoc<typeof schema, "todos">; // just your fields
+type Tags = Infer<ReturnType<typeof v.array<ReturnType<typeof v.string>>>>;
+```
+
+## Exporting for the server
+
+`schema.toJSON()` produces the JSON document the server consumes:
+
+```json title="chisa.schema.json"
+{
+  "tables": {
+    "todos": {
+      "fields": {
+        "text": { "type": "string" },
+        "done": { "type": "boolean" },
+        "priority": { "type": "number", "optional": true }
+      }
+    }
+  }
+}
+```
+
+Start the server with `--schema chisa.schema.json`. From then on:
+
+- mutations touching **unknown tables** are rejected (`UnknownTable`)
+- **unknown fields** are rejected (`UnknownField`)
+- **wrong types** are rejected (`TypeMismatch`)
+- inserts **missing required fields** are rejected (`MissingField`)

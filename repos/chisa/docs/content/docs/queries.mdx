@@ -1,0 +1,80 @@
+---
+title: Queries
+description: Typed, structured, injection-proof queries
+icon: Search
+---
+
+A Chisa query is built with a typed builder and compiled to a plain JSON tree
+(the query AST). There is **no query string anywhere** — which is why user
+input can never change the shape of a query.
+
+## Building queries
+
+```ts
+const q = client
+  .query("todos")                                   // table (schema-checked)
+  .filter((f) => f.and(
+    f.eq("done", false),
+    f.gt("priority", 1),
+  ))
+  .order("_creationTime", "desc")
+  .take(20);
+```
+
+Field names and value types are checked against your schema at compile time:
+`f.eq("done", 3)` and `f.eq("dnoe", false)` are both type errors.
+
+## Filter operators
+
+| Builder | Meaning |
+| --- | --- |
+| `f.eq(field, value)` | equal |
+| `f.neq(field, value)` | not equal |
+| `f.lt / f.lte / f.gt / f.gte` | comparisons (numbers, strings) |
+| `f.and(...exprs)` | all must match |
+| `f.or(...exprs)` | any must match |
+| `f.not(expr)` | negation |
+
+Comparisons across different types use a stable type ordering
+(`null < boolean < number < string`), so sorting and range filters are always
+well-defined.
+
+## Ordering and limits
+
+- `.order(field, "asc" | "desc")` — sort on a single top-level field.
+- `.take(n)` — keep at most `n` documents, applied after ordering.
+
+## The AST
+
+`.toAST()` reveals what actually travels over the wire:
+
+```json
+{
+  "table": "todos",
+  "filter": {
+    "op": "and",
+    "exprs": [
+      { "op": "eq", "field": "done", "value": false },
+      { "op": "gt", "field": "priority", "value": 1 }
+    ]
+  },
+  "order": { "field": "_creationTime", "dir": "desc" },
+  "limit": 20
+}
+```
+
+The server walks this tree structurally. A malicious "value" like
+`"1; DROP TABLE todos"` is just a string that no todo happens to match —
+there is no parser it could escape.
+
+## One-shot vs live
+
+Every query can be used as a **live subscription** — see
+[Sync client](/docs/client). For a one-shot read, subscribe and unsubscribe
+after the first result:
+
+```ts
+const docs = await new Promise((resolve) => {
+  const stop = client.subscribe(q, (d) => { stop(); resolve(d); });
+});
+```
