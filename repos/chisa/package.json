@@ -1,0 +1,14 @@
+{
+  "name": "chisa",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @chisa/client -w @chisa/react",
+    "typecheck": "npm run typecheck -w @chisa/client -w @chisa/react"
+  }
+}
