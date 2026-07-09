@@ -1,0 +1,54 @@
+---
+title: Security
+description: The threat model and why queries can't be injected
+icon: Shield
+---
+
+## Why you can't get pwned by a query
+
+Traditional injection happens when user input is concatenated into a query
+*string* and a parser re-interprets it. Chisa removes the parser:
+
+- Queries travel as **JSON trees** built by a typed builder. The server walks
+  the tree structurally; there is no string to escape out of.
+- User input only ever appears as a **value** inside that tree. A value cannot
+  become an operator, a field selector, or a table name.
+- Operators are a **closed set** (`eq`, `neq`, `lt`, `lte`, `gt`, `gte`,
+  `and`, `or`, `not`). Anything else is rejected as `BadQuery`.
+- With a schema loaded, **table names are allow-listed** — queries and
+  mutations against unknown tables fail before touching data.
+
+## Schema enforcement
+
+Every mutation is validated server-side before it is applied or logged:
+
+| Attack shape | Result |
+| --- | --- |
+| write to a table not in the schema | `UnknownTable` |
+| smuggle an extra field into a document | `UnknownField` |
+| wrong type for a field | `TypeMismatch` |
+| omit a required field | `MissingField` |
+| overwrite `_id` / `_creationTime` | silently ignored (server-owned) |
+
+Client-side types are a convenience; the server never trusts the client.
+
+## Resource limits
+
+- WebSocket frames are capped at 1 MiB.
+- Filter expressions are capped at nesting depth 32.
+- Handshake requests are capped at 16 KiB.
+
+## What Chisa does *not* do (v0.1)
+
+<Callout type="warn">
+The server speaks plaintext WebSocket and has **no authentication or
+authorization**. Anyone who can reach the port can read and write every table.
+</Callout>
+
+Run it accordingly:
+
+- bind to `127.0.0.1` (the default) or a private network,
+- put TLS + authentication in front (any reverse proxy that can terminate
+  `wss://` and gate upgrades works),
+- treat all connected clients as equally trusted — there are no per-row or
+  per-table permissions yet.

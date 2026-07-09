@@ -1,0 +1,6 @@
+node_modules/
+dist/
+zig-out/
+.zig-cache/
+chisa.log
+examples/todo/chisa.schema.json

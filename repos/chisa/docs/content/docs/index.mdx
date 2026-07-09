@@ -1,0 +1,53 @@
+---
+title: Introduction
+description: What Chisa is and how the pieces fit together
+icon: BookOpen
+---
+
+Chisa is a small **sync engine**: a layer that watches for database changes and
+pushes notifications so every connected client stays in sync. On top of it sits
+a Convex-style **database interaction layer** — you define your database in
+code, queries are structured values instead of strings (so injection is
+unrepresentable), and the client keeps live query results synced for you.
+
+```
+┌─────────────┐   typed queries / mutations   ┌──────────────────┐
+│ @chisa/react │──┐                           │   chisa-server   │
+└─────────────┘  │   WebSocket (JSON proto)   │      (Zig)       │
+┌─────────────┐  ├──────────────────────────▶ │  schema check    │
+│ @chisa/client│──┘        live updates       │  query engine    │
+└─────────────┘ ◀──────────────────────────── │  JSONL log       │
+                                              └──────────────────┘
+```
+
+## The pieces
+
+<Cards>
+  <Card title="Quickstart" href="/docs/quickstart" description="From zero to synced todos in five minutes." />
+  <Card title="Schema" href="/docs/schema" description="Define your database in code with full type inference." />
+  <Card title="Queries" href="/docs/queries" description="Typed, structured, injection-proof queries." />
+  <Card title="Sync client" href="/docs/client" description="Live subscriptions, mutations, auto-reconnect." />
+  <Card title="React" href="/docs/react" description="ChisaProvider, useQuery, useMutation." />
+  <Card title="Server" href="/docs/server" description="Run and operate the Zig sync server." />
+</Cards>
+
+## How syncing works
+
+1. A client subscribes to a query. The server runs it and pushes the result set.
+2. Every committed mutation is validated against your schema, appended to the
+   append-only JSONL log, and bumps a global version.
+3. The server then re-runs all live queries on the affected table and pushes
+   fresh results to every subscriber — that push **is** the change
+   notification that keeps clients in sync.
+4. On reconnect the client re-subscribes everything automatically.
+
+## Design principles
+
+- **Lean dependencies.** The server is Zig standard library only.
+  `@chisa/client` has zero runtime dependencies. `@chisa/react` depends only on
+  `@chisa/client`, with `react` as a peer.
+- **Schema as the single source of truth.** One `defineSchema` call gives you
+  static types on the client and runtime enforcement on the server.
+- **No query language.** Queries travel as JSON trees built by a typed builder.
+  User input can only ever be a *value* in that tree — never an operator, a
+  field name outside the schema, or another table.

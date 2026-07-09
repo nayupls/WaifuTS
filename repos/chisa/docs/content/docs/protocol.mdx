@@ -1,0 +1,100 @@
+---
+title: Wire protocol
+description: The JSON protocol spoken over WebSocket
+icon: Cable
+---
+
+Everything is JSON text frames over a WebSocket. You only need this page if
+you're writing a client for another language — the TypeScript client covers
+all of it.
+
+## Client → server
+
+### subscribe
+
+```json
+{ "type": "subscribe", "id": "s1", "query": {
+  "table": "todos",
+  "filter": { "op": "eq", "field": "done", "value": false },
+  "order": { "field": "_creationTime", "dir": "desc" },
+  "limit": 20
+} }
+```
+
+`id` is chosen by the client and scopes all pushes for this subscription.
+`filter`, `order` and `limit` are optional. Filter operators: `eq`, `neq`,
+`lt`, `lte`, `gt`, `gte` (with `field` + `value`), `and`, `or` (with `exprs`),
+`not` (with `expr`). Nesting is capped at depth 32.
+
+### unsubscribe
+
+```json
+{ "type": "unsubscribe", "id": "s1" }
+```
+
+### mutation
+
+```json
+{ "type": "mutation", "id": "m1", "mutation": { "op": "insert",  "table": "todos", "value": { "text": "x", "done": false } } }
+{ "type": "mutation", "id": "m2", "mutation": { "op": "patch",   "table": "todos", "id": "abc…", "fields": { "done": true } } }
+{ "type": "mutation", "id": "m3", "mutation": { "op": "replace", "table": "todos", "id": "abc…", "value": { "text": "y", "done": true } } }
+{ "type": "mutation", "id": "m4", "mutation": { "op": "delete",  "table": "todos", "id": "abc…" } }
+```
+
+`id` correlates the eventual `result`. Fields starting with `_` are ignored in
+`value`/`fields` (system fields are server-owned).
+
+### ping
+
+```json
+{ "type": "ping" }
+```
+
+Answered with `{"type":"pong"}`. WebSocket-level pings are answered with pongs
+as well.
+
+## Server → client
+
+### hello
+
+Sent once after the WebSocket handshake:
+
+```json
+{ "type": "hello", "version": 42 }
+```
+
+### data
+
+The full, fresh result of a subscription — sent immediately after `subscribe`
+and again after every committed mutation on the queried table:
+
+```json
+{ "type": "data", "id": "s1", "version": 43, "docs": [ { "_id": "…", "_creationTime": 1783609145600, "text": "x", "done": false } ] }
+```
+
+`version` is the global commit counter; it increases monotonically and never
+moves backwards within a connection.
+
+### result
+
+```json
+{ "type": "result", "id": "m1", "ok": true, "docId": "abc…" }
+{ "type": "result", "id": "m2", "ok": false, "error": "UnknownField" }
+```
+
+Error names: `UnknownTable`, `UnknownField`, `TypeMismatch`, `MissingField`,
+`DocNotFound`, `BadMutation`, `BadQuery`, `FilterTooDeep`, `UnknownOp`.
+
+### error
+
+Protocol-level problems that aren't tied to a mutation id:
+
+```json
+{ "type": "error", "message": "invalid json" }
+```
+
+## Limits
+
+- Max frame size: 1 MiB (larger frames close the connection).
+- Fragmented WebSocket frames are not supported.
+- Filter nesting depth: 32.

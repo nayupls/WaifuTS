@@ -1,0 +1,69 @@
+---
+title: Server
+description: Run and operate the Zig sync server
+icon: Server
+---
+
+The server is a single static binary built with **Zig 0.16.0** and nothing but
+the standard library: WebSocket handling, schema validation, the query engine
+and persistence are all in-tree (about a thousand lines total).
+
+## Building
+
+```bash
+cd server
+zig build            # -> zig-out/bin/chisa-server
+zig build test       # unit tests (query eval, schema matching)
+```
+
+## Running
+
+```bash
+chisa-server --schema chisa.schema.json --port 4700 --data chisa.log
+```
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--host` | `127.0.0.1` | address to bind |
+| `--port` | `4700` | port to bind |
+| `--data` | `chisa.log` | append-only JSONL data log |
+| `--schema` | *(none)* | schema JSON exported by `@chisa/client` |
+
+Without `--schema` the server runs **schemaless** — any table and shape is
+accepted. Handy while prototyping; don't ship it.
+
+## Persistence
+
+Every committed mutation is appended to the JSONL log before the client's
+promise resolves:
+
+```json title="chisa.log"
+{"op":"insert","table":"todos","doc":{"text":"buy milk","done":false,"_id":"c98b…","_creationTime":1783609145600}}
+{"op":"patch","table":"todos","id":"c98b…","fields":{"done":true}}
+{"op":"delete","table":"todos","id":"c98b…"}
+```
+
+On startup the log is replayed to rebuild the in-memory state (malformed lines
+are skipped with a warning). The log is human-readable, greppable, and easy to
+back up — copy the file.
+
+## Memory model
+
+Live documents are kept in memory (an arena). Memory of deleted or overwritten
+documents is reclaimed on restart via log replay, not at runtime. Restart the
+server occasionally if you churn documents heavily; a compaction pass is on
+the roadmap.
+
+## Concurrency
+
+One OS thread per connection with a single write lock around the data store.
+Mutations are strictly serialized, so every client observes the same order of
+changes (the `version` counter in every data push makes this observable).
+
+## Current limitations (v0.1)
+
+- Full result sets are re-pushed on change (no diffs).
+- No log compaction.
+- Single process; plaintext WebSocket; no built-in auth — see
+  [Security](/docs/security).
+- `order` sorts on one top-level field; filters reference top-level fields.
