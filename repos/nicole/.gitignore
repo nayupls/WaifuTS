@@ -1,0 +1,11 @@
+node_modules
+dist
+.output
+.nitro
+.tanstack
+.env
+.env.local
+.env.*.local
+
+# clerk configuration (can include secrets)
+/.clerk/
